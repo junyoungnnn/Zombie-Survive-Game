@@ -39,11 +39,20 @@ public class Zombie : LivingEntity
 
     private void Awake() {
         // 초기화
+        navMeshAgent = GetComponent<NavMeshAgent>();
+        zombieAnimator = GetComponent<Animator>();
+        zombieAudioPlayer = GetComponent<AudioSource>();
+        zombieRenderer = GetComponentInChildren<Renderer>();
     }
 
     // 좀비 AI의 초기 스펙을 결정하는 셋업 메서드
     public void Setup(ZombieData zombieData) {
-        
+        startingHealth = zombieData.health;
+        health = zombieData.damage;
+
+        damage = zombieData.damage;
+        navMeshAgent.speed = zombieData.speed;
+        zombieRenderer.material.color = zombieData.skinColor;
     }
 
     private void Start() {
@@ -61,6 +70,37 @@ public class Zombie : LivingEntity
         // 살아 있는 동안 무한 루프
         while (!dead)
         {
+            if(hasTarget)
+            {
+                navMeshAgent.isStopped = false;
+                navMeshAgent.SetDestination(
+                    targetEntity.transform.position);
+            }
+            else
+            {
+                // 추적 대상없음
+                navMeshAgent.isStopped = true;
+
+                // 20유닛의 반지름을 가진 가상의 구를 그렸을 때 구와 겹치는 모든 콜라이더를 가져옴
+                // 단, whatIsTarget 레이러르 가진 콜라이더만 가져오도록 필터링
+                Collider[] colliders = Physics.OverlapSphere(transform.position, 20f, whatIsTarget);
+
+                // 모든 콜라이더를 순회하면서 살아 있는 LivingEntity찾기
+                for(int i = 0; i< colliders.Length; i++)
+                {
+                    // 콜라이더로부터 LivingEntity 컴포넌트 가져오기
+                    LivingEntity livingEntity = colliders[i].GetComponent<LivingEntity>();
+
+                    // 컴포넌트가 존재하고 살아있다면
+                    if(livingEntity != null && !livingEntity.dead)
+                    {
+                        targetEntity = livingEntity;
+
+                        break;
+                    }
+                }
+            }
+
             // 0.25초 주기로 처리 반복
             yield return new WaitForSeconds(0.25f);
         }
