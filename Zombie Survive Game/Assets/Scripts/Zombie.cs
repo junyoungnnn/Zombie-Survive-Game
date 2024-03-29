@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI; // AI, 내비게이션 시스템 관련 코드 가져오기
 
@@ -108,6 +109,17 @@ public class Zombie : LivingEntity
 
     // 데미지를 입었을 때 실행할 처리
     public override void OnDamage(float damage, Vector3 hitPoint, Vector3 hitNormal) {
+        if(!dead)
+        {
+            // 공격받은 지점과 방향으로 파티클 효과 재생
+            hitEffect.transform.position = hitPoint;
+            hitEffect.transform.rotation = Quaternion.LookRotation(hitNormal);
+            hitEffect.Play();
+
+            // 피격 효과음 재생
+            zombieAudioPlayer.PlayOneShot(hitSound);
+        }       
+                
         // LivingEntity의 OnDamage()를 실행하여 데미지 적용
         base.OnDamage(damage, hitPoint, hitNormal);
     }
@@ -116,9 +128,45 @@ public class Zombie : LivingEntity
     public override void Die() {
         // LivingEntity의 Die()를 실행하여 기본 사망 처리 실행
         base.Die();
+
+        // 다른 AI를 방해하지 않도록 자신의 모든 콜라이더를 비활성화
+        Collider[] zombieColliders = GetComponents<Collider>();
+        for (int i = 0; i < zombieColliders.Length; i++)
+        {
+            zombieColliders[i].enabled = false;
+        }
+
+        // AI추적을 중지하고 내비메시 컴포넌트 비활성화
+        navMeshAgent.isStopped = true;
+        navMeshAgent.enabled = false;
+
+        //사망 애니메이션 재생
+        zombieAnimator.SetTrigger("Die");
+        // 사망 효과음 재생
+        zombieAudioPlayer.PlayOneShot(deathSound);
     }
 
     private void OnTriggerStay(Collider other) {
-        // 트리거 충돌한 상대방 게임 오브젝트가 추적 대상이라면 공격 실행
+
+        // 자신이 사망하지 않았고 최근 공격 시점에서 timeBetAttack 이상 시간이 지났다면 공격 가능
+        if(!dead && Time.time >= lastAttackTime + timeBetAttack)
+        {
+            // 상대방의 KivingEntity 타입 가져오기 시도
+            LivingEntity attackTarget = other.GetComponent<LivingEntity>();
+
+            // 트리거 충돌한 상대방 게임 오브젝트가 추적 대상이라면 공격 실행
+            if (attackTarget != null & attackTarget == targetEntity)
+            {
+                // 최근 공격 시간 갱신
+                lastAttackTime = Time.time;
+                
+                // 상대방의 피격 위치와 피격 방향을 근삿값으로 계산
+                Vector3 hitPoint = other.ClosestPoint(transform.position);
+                Vector3 hitNormal = transform.position - other.transform.position;
+
+                // 공격 실행
+                attackTarget.OnDamage(damage, hitPoint, hitNormal);
+            }
+        }
     }
 }
